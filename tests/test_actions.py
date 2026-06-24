@@ -8,7 +8,7 @@ from llml.instances import load_instance
 from llml.settings import Settings
 
 
-def make_config_repo(tmp_path: Path, body: str) -> tuple[Settings, Path]:
+def make_config(tmp_path: Path, body: str) -> tuple[Settings, Path]:
   config_dir = tmp_path / 'config'
   instances_dir = config_dir / 'instances'
   instances_dir.mkdir(parents=True)
@@ -49,7 +49,7 @@ def test_parse_hf_download_args_rejects_unmapped_options() -> None:
 
 
 def test_pull_dry_run_preserves_hf_cli_shape(tmp_path: Path) -> None:
-  settings, model_dir = make_config_repo(
+  settings, model_dir = make_config(
     tmp_path,
     """
 [models.gemma]
@@ -82,7 +82,7 @@ mmproj = "${local-dir}/${mmproj-file}"
 
 def test_pull_passes_configured_hf_token(tmp_path: Path, monkeypatch) -> None:
   calls = []
-  settings, _ = make_config_repo(
+  settings, _ = make_config(
     tmp_path,
     """
 [models.gemma]
@@ -122,7 +122,7 @@ model = "${local-dir}/${model-file}"
 
 
 def test_pull_reports_stale_fetch_config(tmp_path: Path) -> None:
-  settings, _ = make_config_repo(
+  settings, _ = make_config(
     tmp_path,
     """
 [models.gemma]
@@ -148,7 +148,7 @@ model = "${local-dir}/${model-file}"
 
 
 def test_purge_removes_only_named_models(tmp_path: Path) -> None:
-  settings, model_dir = make_config_repo(
+  settings, model_dir = make_config(
     tmp_path,
     """
 [models.keep]

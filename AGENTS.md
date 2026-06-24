@@ -2,7 +2,7 @@
 
 ## Project Shape
 
-`llml` is a Python CLI package. Keep CLI parsing in `llml/cli.py`, provider work in `llml/actions.py`, instance parsing/rendering in `llml/instances.py`, and user/config-repo settings in `llml/settings.py` and `llml/config_repo.py`.
+`llml` is a Python CLI package. Keep CLI parsing in `llml/cli.py`, provider work in `llml/actions.py`, instance parsing/rendering in `llml/instances.py`, and user/config-repo settings in `llml/settings.py` and `llml/repos.py`.
 
 ## Development
 

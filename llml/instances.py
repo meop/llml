@@ -3,7 +3,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from llml.config_repo import ensure_config_repo
+from llml.repos import ensure_config_repo
 from llml.errors import CliError
 from llml.settings import Settings, variables
 

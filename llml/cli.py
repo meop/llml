@@ -6,7 +6,7 @@ import click
 from git import GitCommandNotFound
 
 from llml.actions import app_version, executable_version, pull_models, purge_models, serve_instance
-from llml.config_repo import update_config_repo
+from llml.repos import update_config_repo
 from llml.errors import CliError
 from llml.instances import all_models, list_instances, load_instance
 from llml.settings import Settings, load_settings
