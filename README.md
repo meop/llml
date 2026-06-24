@@ -21,7 +21,9 @@ uv run llml refresh
 
 `find` lists every model defined in the config; `list` lists only the models installed on disk. Both share one output shape (each instance, with its models indented below it) and one filter. Use them to discover what to act on before running `sync`, `remove`, or `serve`.
 
-The `<instance>` and `[model ...]` arguments to `sync`, `remove`, and `serve` are matched loosely: case-insensitive, by substring, and you do not need the full name. An exact (case-insensitive) match always wins over substring matches, so with instances `desktop` and `desktop-lite`, `desktop` selects only `desktop` while `desk` is reported as ambiguous. An instance argument must resolve to exactly one instance; a model argument may resolve to several (each matched model is acted on), unless it matches one exactly.
+The `<instance>` and `[model ...]` arguments to `sync`, `remove`, and `serve` are matched loosely: case-insensitive, by substring, so you do not need the full name. The rule is that an exact (case-insensitive) match short-circuits substring matching — if a term equals a name exactly, only that name is used; otherwise the term matches every name it is a substring of.
+
+So with instances `desktop` and `desktop-lite`: `desktop` selects only `desktop`, while `desk` matches both and is reported as ambiguous. An instance argument must resolve to exactly one instance. A model argument may resolve to several, and each match is acted on: `remove desktop gem` removes both `gemma` and `gemma-lite`, but `remove desktop gemma` removes only `gemma` because the exact match short-circuits the glob.
 
 ## Actions
 
