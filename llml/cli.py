@@ -15,7 +15,15 @@ from llml.actions import (
 )
 from llml.repos import refresh_config_repo
 from llml.errors import CliError
-from llml.instances import all_models, find_instances, installed_instances, list_instances, load_instance
+from llml.instances import (
+  all_models,
+  find_instances,
+  installed_instances,
+  list_instances,
+  load_instance,
+  resolve_instance,
+  resolve_models,
+)
 from llml.settings import Settings, load_settings
 
 
@@ -45,6 +53,11 @@ def print_models_help(action: str, instance_name: str, instance: dict) -> None:
 
 def state_from_context(ctx: click.Context) -> State:
   return ctx.find_root().obj
+
+
+def resolve_loaded_instance(settings: Settings, term: str) -> tuple[str, dict]:
+  name = resolve_instance(settings, term)
+  return name, load_instance(settings, name)
 
 
 def echo_matches(matches: list[tuple[str, list[str]]]) -> None:
@@ -87,12 +100,13 @@ def sync(ctx: click.Context, help_requested: bool, instance_name: str | None, mo
       if instance_name is None:
         print_instances_help('sync', state.settings)
         return
-      instance = load_instance(state.settings, instance_name)
-      print_models_help('sync', instance_name, instance)
+      name, instance = resolve_loaded_instance(state.settings, instance_name)
+      print_models_help('sync', name, instance)
       return
 
-    instance = load_instance(state.settings, instance_name)
-    for line in sync_models(instance, model_names, state.settings, state.dry_run):
+    name, instance = resolve_loaded_instance(state.settings, instance_name)
+    models = resolve_models(instance, model_names)
+    for line in sync_models(instance, models, state.settings, state.dry_run):
       click.echo(line)
 
   run_with_errors(command)
@@ -111,12 +125,12 @@ def serve(ctx: click.Context, help_requested: bool, instance_name: str | None) -
       if instance_name is None:
         print_instances_help('serve', state.settings)
         return
-      instance = load_instance(state.settings, instance_name)
-      print_models_help('serve', instance_name, instance)
+      name, instance = resolve_loaded_instance(state.settings, instance_name)
+      print_models_help('serve', name, instance)
       return
 
-    instance = load_instance(state.settings, instance_name)
-    code, line = serve_instance(instance_name, instance, state.settings, state.dry_run)
+    name, instance = resolve_loaded_instance(state.settings, instance_name)
+    code, line = serve_instance(name, instance, state.settings, state.dry_run)
     if line:
       click.echo(line)
     if code:
@@ -139,12 +153,13 @@ def remove(ctx: click.Context, help_requested: bool, instance_name: str | None, 
       if instance_name is None:
         print_instances_help('remove', state.settings)
         return
-      instance = load_instance(state.settings, instance_name)
-      print_models_help('remove', instance_name, instance)
+      name, instance = resolve_loaded_instance(state.settings, instance_name)
+      print_models_help('remove', name, instance)
       return
 
-    instance = load_instance(state.settings, instance_name)
-    for line in remove_models(instance, model_names, state.settings, state.dry_run):
+    name, instance = resolve_loaded_instance(state.settings, instance_name)
+    models = resolve_models(instance, model_names)
+    for line in remove_models(instance, models, state.settings, state.dry_run):
       click.echo(line)
 
   run_with_errors(command)

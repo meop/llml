@@ -88,6 +88,37 @@ def selected_models(instance: dict[str, Any], requested: tuple[str, ...]) -> dic
   return {name: models[name] for name in requested}
 
 
+def _loose_match(term: str, names: list[str]) -> list[str]:
+  lowered = term.lower()
+  exact = [name for name in names if name.lower() == lowered]
+  if exact:
+    return exact
+  return [name for name in names if lowered in name.lower()]
+
+
+def resolve_instance(settings: Settings, term: str) -> str:
+  matched = _loose_match(term, list_instances(settings))
+  if len(matched) == 1:
+    return matched[0]
+  if not matched:
+    raise CliError(f'unknown instance: {term}')
+  raise CliError(f'ambiguous instance "{term}": matches {", ".join(matched)}')
+
+
+def resolve_models(instance: dict[str, Any], terms: tuple[str, ...]) -> tuple[str, ...]:
+  names = list(all_models(instance))
+  if not terms:
+    return tuple(names)
+
+  resolved: list[str] = []
+  for term in terms:
+    matched = _loose_match(term, names)
+    if not matched:
+      raise CliError(f'unknown model: {term}')
+    resolved.extend(matched)
+  return tuple(dict.fromkeys(resolved))
+
+
 def nested_table(node: dict[str, Any], path: tuple[str, ...], label: str) -> dict[str, Any]:
   current: Any = node
   for key in path:

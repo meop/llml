@@ -21,6 +21,8 @@ uv run llml refresh
 
 `find` lists every model defined in the config; `list` lists only the models installed on disk. Both share one output shape (each instance, with its models indented below it) and one filter. Use them to discover what to act on before running `sync`, `remove`, or `serve`.
 
+The `<instance>` and `[model ...]` arguments to `sync`, `remove`, and `serve` are matched loosely: case-insensitive, by substring, and you do not need the full name. An exact (case-insensitive) match always wins over substring matches, so with instances `desktop` and `desktop-lite`, `desktop` selects only `desktop` while `desk` is reported as ambiguous. An instance argument must resolve to exactly one instance; a model argument may resolve to several (each matched model is acted on), unless it matches one exactly.
+
 ## Actions
 
 Each command acts on one of three things: an **instance** (`list`, `find`, `sync`, `remove`, `serve`), the whole **model store** (`tidy`), or the **config repo** (`refresh`). `doctor` reports on the local environment.

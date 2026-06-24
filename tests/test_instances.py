@@ -1,6 +1,17 @@
 from pathlib import Path
 
-from llml.instances import find_instances, installed_instances, load_instance, model_values, write_models_ini
+import pytest
+
+from llml.errors import CliError
+from llml.instances import (
+  find_instances,
+  installed_instances,
+  load_instance,
+  model_values,
+  resolve_instance,
+  resolve_models,
+  write_models_ini,
+)
 from llml.settings import Settings
 
 
@@ -129,6 +140,83 @@ model = "${local-dir}/phi.gguf"
   install(settings, 'gemma/gemma.gguf')
 
   assert installed_instances(settings, ()) == [('desktop', ['gemma'])]
+
+
+RESOLVE_BODY = """
+[models.gemma]
+local-dir = "x"
+[models.gemma-lite]
+local-dir = "y"
+[models.qwen]
+local-dir = "z"
+"""
+
+
+def make_resolve_settings(tmp_path: Path) -> Settings:
+  return make_settings(tmp_path, RESOLVE_BODY, instances={'desktop-lite': RESOLVE_BODY})
+
+
+def test_resolve_instance_exact_wins_over_substring(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+
+  assert resolve_instance(settings, 'desktop') == 'desktop'
+  assert resolve_instance(settings, 'DESKTOP') == 'desktop'
+
+
+def test_resolve_instance_unique_substring(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+
+  assert resolve_instance(settings, 'lite') == 'desktop-lite'
+
+
+def test_resolve_instance_ambiguous_substring_errors(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+
+  with pytest.raises(CliError, match='ambiguous instance'):
+    resolve_instance(settings, 'desk')
+
+
+def test_resolve_instance_unknown_errors(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+
+  with pytest.raises(CliError, match='unknown instance'):
+    resolve_instance(settings, 'server')
+
+
+def test_resolve_models_exact_wins_over_glob(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+  instance = load_instance(settings, 'desktop')
+
+  assert resolve_models(instance, ('gemma',)) == ('gemma',)
+
+
+def test_resolve_models_substring_globs_multiple(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+  instance = load_instance(settings, 'desktop')
+
+  assert resolve_models(instance, ('gem',)) == ('gemma', 'gemma-lite')
+
+
+def test_resolve_models_unions_and_dedupes_across_terms(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+  instance = load_instance(settings, 'desktop')
+
+  assert resolve_models(instance, ('gem', 'GEMMA')) == ('gemma', 'gemma-lite')
+
+
+def test_resolve_models_no_terms_returns_all(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+  instance = load_instance(settings, 'desktop')
+
+  assert resolve_models(instance, ()) == ('gemma', 'gemma-lite', 'qwen')
+
+
+def test_resolve_models_unknown_errors(tmp_path: Path) -> None:
+  settings = make_resolve_settings(tmp_path)
+  instance = load_instance(settings, 'desktop')
+
+  with pytest.raises(CliError, match='unknown model'):
+    resolve_models(instance, ('llama',))
 
 
 def test_model_values_expand_shared_model_variables(tmp_path: Path) -> None:
