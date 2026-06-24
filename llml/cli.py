@@ -89,7 +89,7 @@ def pull(ctx: click.Context, help_requested: bool, instance_name: str | None, mo
 @click.argument('instance_name', required=False)
 @click.pass_context
 def serve(ctx: click.Context, help_requested: bool, instance_name: str | None) -> None:
-  """Start llama-server for an instance."""
+  """Start the serving provider for an instance."""
   state = state_from_context(ctx)
 
   def command() -> None:
