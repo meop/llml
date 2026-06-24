@@ -15,7 +15,7 @@ from llml.actions import (
 )
 from llml.repos import refresh_config_repo
 from llml.errors import CliError
-from llml.instances import all_models, list_instances, load_instance
+from llml.instances import all_models, find_instances, list_instances, load_instance
 from llml.settings import Settings, load_settings
 
 
@@ -171,6 +171,22 @@ def list_(ctx: click.Context) -> None:
       click.echo(name)
       instance = load_instance(state.settings, name)
       for model_name in all_models(instance):
+        click.echo(f'  {model_name}')
+
+  run_with_errors(command)
+
+
+@root.command()
+@click.argument('terms', nargs=-1)
+@click.pass_context
+def find(ctx: click.Context, terms: tuple[str, ...]) -> None:
+  """Find instances and models matching every given term."""
+  state = state_from_context(ctx)
+
+  def command() -> None:
+    for name, model_names in find_instances(state.settings, terms):
+      click.echo(name)
+      for model_name in model_names:
         click.echo(f'  {model_name}')
 
   run_with_errors(command)

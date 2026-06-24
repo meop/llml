@@ -1,15 +1,17 @@
 from pathlib import Path
 
-from llml.instances import load_instance, model_values, write_models_ini
+from llml.instances import find_instances, load_instance, model_values, write_models_ini
 from llml.settings import Settings
 
 
-def make_settings(tmp_path: Path, body: str) -> Settings:
+def make_settings(tmp_path: Path, body: str, instances: dict[str, str] | None = None) -> Settings:
   config_dir = tmp_path / 'config'
   instances_dir = config_dir / 'instances'
   instances_dir.mkdir(parents=True)
   (config_dir / '.git').mkdir()
   (instances_dir / 'desktop.toml').write_text(body, encoding='utf-8')
+  for name, instance_body in (instances or {}).items():
+    (instances_dir / f'{name}.toml').write_text(instance_body, encoding='utf-8')
   return Settings(
     user_config_path=tmp_path / 'config.toml',
     config_uri='unused',
@@ -17,6 +19,64 @@ def make_settings(tmp_path: Path, body: str) -> Settings:
     model_dir=tmp_path / 'models',
     hf_token=None,
   )
+
+
+def make_find_settings(tmp_path: Path) -> Settings:
+  return make_settings(
+    tmp_path,
+    """
+[models.gemma]
+local-dir = "x"
+[models.qwen]
+local-dir = "y"
+""",
+    instances={
+      'laptop': """
+[models.gemma]
+local-dir = "x"
+[models.phi]
+local-dir = "z"
+""",
+    },
+  )
+
+
+def test_find_no_terms_dumps_every_instance_and_model(tmp_path: Path) -> None:
+  settings = make_find_settings(tmp_path)
+
+  assert find_instances(settings, ()) == [
+    ('desktop', ['gemma', 'qwen']),
+    ('laptop', ['gemma', 'phi']),
+  ]
+
+
+def test_find_instance_term_keeps_all_its_models(tmp_path: Path) -> None:
+  settings = make_find_settings(tmp_path)
+
+  assert find_instances(settings, ('desk',)) == [('desktop', ['gemma', 'qwen'])]
+
+
+def test_find_model_term_spans_instances(tmp_path: Path) -> None:
+  settings = make_find_settings(tmp_path)
+
+  assert find_instances(settings, ('gemma',)) == [
+    ('desktop', ['gemma']),
+    ('laptop', ['gemma']),
+  ]
+
+
+def test_find_terms_are_order_independent_and_anded(tmp_path: Path) -> None:
+  settings = make_find_settings(tmp_path)
+
+  expected = [('desktop', ['gemma'])]
+  assert find_instances(settings, ('desk', 'gemma')) == expected
+  assert find_instances(settings, ('gemma', 'desk')) == expected
+
+
+def test_find_is_case_insensitive(tmp_path: Path) -> None:
+  settings = make_find_settings(tmp_path)
+
+  assert find_instances(settings, ('DESK', 'GEMMA')) == [('desktop', ['gemma'])]
 
 
 def test_model_values_expand_shared_model_variables(tmp_path: Path) -> None:

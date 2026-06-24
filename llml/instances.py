@@ -47,6 +47,20 @@ def all_models(instance: dict[str, Any]) -> dict[str, dict[str, Any]]:
   return {name: model for name, model in models.items() if isinstance(model, dict)}
 
 
+def find_instances(settings: Settings, terms: tuple[str, ...]) -> list[tuple[str, list[str]]]:
+  needles = [term.lower() for term in terms]
+  matches: list[tuple[str, list[str]]] = []
+  for name in list_instances(settings):
+    model_names = list(all_models(load_instance(settings, name)))
+    if model_names:
+      hit = [model for model in model_names if all(n in f'{name}-{model}'.lower() for n in needles)]
+      if hit:
+        matches.append((name, hit))
+    elif all(n in name.lower() for n in needles):
+      matches.append((name, []))
+  return matches
+
+
 def selected_models(instance: dict[str, Any], requested: tuple[str, ...]) -> dict[str, dict[str, Any]]:
   models = all_models(instance)
   if not requested:
