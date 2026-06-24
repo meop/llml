@@ -1,0 +1,29 @@
+[project]
+name = "llml"
+version = "0.1.0"
+description = "Run local LLM workflows from named TOML instances."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = ["click>=8.4", "GitPython>=3.1", "huggingface-hub>=1.20"]
+
+[project.scripts]
+llml = "llml.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.30"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=9.1", "ruff>=0.15"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["llml"]
+
+[tool.ruff]
+indent-width = 2
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "single"
+skip-magic-trailing-comma = false

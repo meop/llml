@@ -1,0 +1,107 @@
+# llml
+
+`llml` is a small CLI for running local LLM workflows from named TOML instances.
+
+By default, `llml` expects a config repo at `~/.config/llml/config` and clones the default source there when an action first needs instances.
+
+## Usage
+
+```sh
+uv run llml doctor
+uv run llml fetch <instance> [model ...]
+uv run llml purge <instance> [model ...]
+uv run llml serve <instance>
+uv run llml update
+```
+
+`--dry-run` can appear anywhere in the args and prints the command or action without executing it.
+
+Use help at each action level to discover available instances or models:
+
+```sh
+uv run llml fetch --help
+uv run llml fetch desktop --help
+```
+
+## Actions
+
+`fetch` reads each selected model's `fetch.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to download the exact configured files into `--local-dir`. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
+
+`serve` generates `~/.cache/llml/instances/<instance>/llama-server/models.ini` from models that actually exist on disk, then starts `llama-server` with the instance's configured arguments.
+
+`purge <instance> [model ...]` removes fetched model directories for models not in the keep list. With no model names, it purges every model directory in that instance. Purge refuses to remove paths outside `model_dir`.
+
+`update` uses GitPython to clone the config repo if it is missing or pull it if it already exists.
+
+## Configuration
+
+User configuration lives at `~/.config/llml/config.toml`.
+
+```toml
+config_uri = "https://github.com/meop/llml-config.git"
+config_dir = "~/.config/llml/config"
+model_dir = "~/.config/llm/model"
+hf_token = "hf_..."
+```
+
+Every `llml` config value can be overridden by an environment variable:
+
+| TOML key | Environment variable | Default |
+| --- | --- | --- |
+| `config_uri` | `LLML_CONFIG_URI` | Same as the example above |
+| `config_dir` | `LLML_CONFIG_DIR` | `~/.config/llml/config` |
+| `model_dir` | `LLML_MODEL_DIR` | `~/.config/llm/model` |
+| `hf_token` | `LLML_HF_TOKEN` | Unset |
+
+`config_uri` is the Git URL or local path used when `config_dir` does not exist. `config_dir` is the local clone. `model_dir` is where model symlinks or downloaded model directories live.
+
+Instance files can use `${LLML_CONFIG_DIR}` and `${LLML_MODEL_DIR}`. `llml` expands those values before calling providers. `llama-server` receives a generated concrete `models.ini`; it is not expected to interpret `${...}` placeholders itself.
+
+## Instance Shape
+
+Instances live in `instances/*.toml` inside the config repo. Each instance is a cohesive profile: fetch settings, serve settings, and model definitions all live together. Providers such as `hf` and `llama-server` are baked into the instance and are not CLI arguments.
+
+```toml
+[serve.llama-server]
+arguments = [
+  "--host 0.0.0.0",
+  "--models-preset ${LLML_LLAMA_SERVER_MODELS_INI}",
+]
+
+[models.gemma-4-e4b]
+repo = "unsloth/gemma-4-E4B-it-GGUF"
+local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-4-E4B-it-GGUF"
+model-file = "model.gguf"
+mmproj-file = "mmproj.gguf"
+
+[models.gemma-4-e4b.fetch.hf]
+arguments = [
+  "${repo}",
+  "${model-file}",
+  "${mmproj-file}",
+  "--local-dir ${local-dir}",
+]
+
+[models.gemma-4-e4b.serve.llama-server]
+model = "${local-dir}/${model-file}"
+mmproj = "${local-dir}/${mmproj-file}"
+temperature = 1.0
+```
+
+## Packaging
+
+Runtime dependencies are `click`, `huggingface-hub`, and `GitPython`.
+
+Hatchling is used only as the build backend so the project can produce a PyPI-ready wheel and sdist. It does not upload anything to PyPI; publishing is a separate step handled by a publisher such as `uv publish`:
+
+```sh
+uv build
+```
+
+## Development
+
+```sh
+uv sync
+uv run ruff check .
+uv run pytest
+```
