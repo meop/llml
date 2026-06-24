@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 import click
 from git import GitCommandNotFound
 
-from llml.actions import app_version, executable_version, fetch_models, purge_models, serve_instance
+from llml.actions import app_version, executable_version, pull_models, purge_models, serve_instance
 from llml.config_repo import update_config_repo
 from llml.errors import CliError
 from llml.instances import all_models, list_instances, load_instance
@@ -19,7 +19,7 @@ class State:
 
 
 def print_instances_help(action: str, settings: Settings) -> None:
-  suffix = ' [model ...]' if action in {'fetch', 'purge'} else ''
+  suffix = ' [model ...]' if action in {'pull', 'purge'} else ''
   click.echo(f'usage: llml {action} <instance>{suffix}')
   click.echo()
   click.echo('instances:')
@@ -28,7 +28,7 @@ def print_instances_help(action: str, settings: Settings) -> None:
 
 
 def print_models_help(action: str, instance_name: str, instance: dict) -> None:
-  suffix = ' [model ...]' if action in {'fetch', 'purge'} else ''
+  suffix = ' [model ...]' if action in {'pull', 'purge'} else ''
   click.echo(f'usage: llml {action} {instance_name}{suffix}')
   click.echo()
   click.echo('models:')
@@ -64,21 +64,21 @@ def root(ctx: click.Context, dry_run: bool) -> None:
 @click.argument('instance_name', required=False)
 @click.argument('model_names', nargs=-1)
 @click.pass_context
-def fetch(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
-  """Fetch model files for an instance."""
+def pull(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
+  """Pull model files for an instance."""
   state = state_from_context(ctx)
 
   def command() -> None:
     if help_requested or instance_name is None:
       if instance_name is None:
-        print_instances_help('fetch', state.settings)
+        print_instances_help('pull', state.settings)
         return
       instance = load_instance(state.settings, instance_name)
-      print_models_help('fetch', instance_name, instance)
+      print_models_help('pull', instance_name, instance)
       return
 
     instance = load_instance(state.settings, instance_name)
-    for line in fetch_models(instance, model_names, state.settings, state.dry_run):
+    for line in pull_models(instance, model_names, state.settings, state.dry_run):
       click.echo(line)
 
   run_with_errors(command)
@@ -117,7 +117,7 @@ def serve(ctx: click.Context, help_requested: bool, instance_name: str | None) -
 @click.argument('model_names', nargs=-1)
 @click.pass_context
 def purge(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
-  """Remove fetched model directories outside the keep list."""
+  """Remove selected model directories for an instance."""
   state = state_from_context(ctx)
 
   def command() -> None:

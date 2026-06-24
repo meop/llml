@@ -28,7 +28,7 @@ repo = "unsloth/gemma-GGUF"
 local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-GGUF"
 model-file = "gemma.gguf"
 
-[models.gemma.fetch.hf]
+[models.gemma.pull.hf]
 arguments = []
 
 [models.gemma.serve.llama-server]
@@ -60,7 +60,7 @@ ctx-size = 32768
 local-dir = "${LLML_MODEL_DIR}/present"
 model-file = "present.gguf"
 
-[models.present.fetch.hf]
+[models.present.pull.hf]
 arguments = []
 
 [models.present.serve.llama-server]
@@ -71,7 +71,7 @@ temperature = 1.0
 local-dir = "${LLML_MODEL_DIR}/missing"
 model-file = "missing.gguf"
 
-[models.missing.fetch.hf]
+[models.missing.pull.hf]
 arguments = []
 
 [models.missing.serve.llama-server]

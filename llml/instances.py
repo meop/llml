@@ -69,8 +69,8 @@ def nested_table(node: dict[str, Any], path: tuple[str, ...], label: str) -> dic
   return current
 
 
-def model_fetch_hf(model: dict[str, Any]) -> dict[str, Any]:
-  return nested_table(model, ('fetch', 'hf'), 'model fetch.hf config')
+def model_pull_hf(model: dict[str, Any]) -> dict[str, Any]:
+  return nested_table(model, ('pull', 'hf'), 'model pull.hf config')
 
 
 def model_serve_llama_server(model: dict[str, Any]) -> dict[str, Any]:

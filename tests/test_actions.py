@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from llml.actions import fetch_models, parse_hf_download_args
+from llml.actions import parse_hf_download_args, pull_models, purge_models
 from llml.errors import CliError
 from llml.instances import load_instance
 from llml.settings import Settings
@@ -48,7 +48,7 @@ def test_parse_hf_download_args_rejects_unmapped_options() -> None:
     parse_hf_download_args(['repo/name', '--revision', 'main', '--local-dir', 'models'])
 
 
-def test_fetch_dry_run_preserves_hf_cli_shape(tmp_path: Path) -> None:
+def test_pull_dry_run_preserves_hf_cli_shape(tmp_path: Path) -> None:
   settings, model_dir = make_config_repo(
     tmp_path,
     """
@@ -58,7 +58,7 @@ local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-GGUF"
 model-file = "gemma.gguf"
 mmproj-file = "mmproj.gguf"
 
-[models.gemma.fetch.hf]
+[models.gemma.pull.hf]
 arguments = [
   "${repo}",
   "${model-file}",
@@ -73,14 +73,14 @@ mmproj = "${local-dir}/${mmproj-file}"
   )
   instance = load_instance(settings, 'desktop')
 
-  output = fetch_models(instance, ('gemma',), settings, dry_run=True)
+  output = pull_models(instance, ('gemma',), settings, dry_run=True)
 
   assert output == [
     f'hf download unsloth/gemma-GGUF gemma.gguf mmproj.gguf --local-dir {model_dir.as_posix()}/unsloth/gemma-GGUF'
   ]
 
 
-def test_fetch_passes_configured_hf_token(tmp_path: Path, monkeypatch) -> None:
+def test_pull_passes_configured_hf_token(tmp_path: Path, monkeypatch) -> None:
   calls = []
   settings, _ = make_config_repo(
     tmp_path,
@@ -90,7 +90,7 @@ repo = "unsloth/gemma-GGUF"
 local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-GGUF"
 model-file = "gemma.gguf"
 
-[models.gemma.fetch.hf]
+[models.gemma.pull.hf]
 arguments = [
   "${repo}",
   "${model-file}",
@@ -116,6 +116,40 @@ model = "${local-dir}/${model-file}"
   monkeypatch.setattr('llml.actions.snapshot_download', fake_snapshot_download)
   instance = load_instance(settings, 'desktop')
 
-  fetch_models(instance, ('gemma',), settings, dry_run=False)
+  pull_models(instance, ('gemma',), settings, dry_run=False)
 
   assert calls[0]['token'] == 'secret-token'
+
+
+def test_purge_removes_only_named_models(tmp_path: Path) -> None:
+  settings, model_dir = make_config_repo(
+    tmp_path,
+    """
+[models.keep]
+local-dir = "${LLML_MODEL_DIR}/keep"
+
+[models.keep.pull.hf]
+arguments = []
+
+[models.keep.serve.llama-server]
+model = "${local-dir}/keep.gguf"
+
+[models.remove]
+local-dir = "${LLML_MODEL_DIR}/remove"
+
+[models.remove.pull.hf]
+arguments = []
+
+[models.remove.serve.llama-server]
+model = "${local-dir}/remove.gguf"
+""",
+  )
+  (model_dir / 'keep').mkdir(parents=True)
+  (model_dir / 'remove').mkdir(parents=True)
+  instance = load_instance(settings, 'desktop')
+
+  output = purge_models(instance, ('remove',), settings, dry_run=False)
+
+  assert output == [f'removed {model_dir / "remove"}']
+  assert (model_dir / 'keep').exists()
+  assert not (model_dir / 'remove').exists()

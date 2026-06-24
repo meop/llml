@@ -10,7 +10,7 @@ from llml.errors import CliError
 from llml.instances import (
   all_models,
   expand_arg_list,
-  model_fetch_hf,
+  model_pull_hf,
   model_local_dir,
   model_values,
   nested_table,
@@ -33,7 +33,7 @@ def hf_command_preview(arguments: list[str]) -> str:
 
 def parse_hf_download_args(arguments: list[str]) -> tuple[str, list[str], Path]:
   if not arguments:
-    raise CliError('model fetch.hf arguments must start with a repo id')
+    raise CliError('model pull.hf arguments must start with a repo id')
 
   repo_id = arguments[0]
   files: list[str] = []
@@ -48,23 +48,23 @@ def parse_hf_download_args(arguments: list[str]) -> tuple[str, list[str], Path]:
         raise CliError('--local-dir needs a value')
       local_dir = Path(arguments[index])
     elif arg.startswith('--'):
-      raise CliError(f'unsupported hf argument for library fetch: {arg}')
+      raise CliError(f'unsupported hf argument for library pull: {arg}')
     else:
       files.append(arg)
     index += 1
 
   if local_dir is None:
-    raise CliError('model fetch.hf arguments need --local-dir')
+    raise CliError('model pull.hf arguments need --local-dir')
   return repo_id, files, local_dir
 
 
-def fetch_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
+def pull_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
   output: list[str] = []
   for _, model in selected_models(instance, model_names).items():
-    hf = model_fetch_hf(model)
+    hf = model_pull_hf(model)
     arguments = hf.get('arguments')
     if not isinstance(arguments, list):
-      raise CliError('model fetch.hf needs an arguments list')
+      raise CliError('model pull.hf needs an arguments list')
 
     expanded = expand_arg_list(arguments, model_values(model, settings))
     if dry_run:
@@ -73,7 +73,7 @@ def fetch_models(instance: dict, model_names: tuple[str, ...], settings: Setting
 
     repo_id, files, local_dir = parse_hf_download_args(expanded)
     snapshot_download(repo_id=repo_id, allow_patterns=files or None, local_dir=str(local_dir), token=settings.hf_token)
-    output.append(f'fetched {repo_id} to {local_dir}')
+    output.append(f'pulled {repo_id} to {local_dir}')
   return output
 
 
@@ -98,15 +98,15 @@ def is_under(path: Path, parent: Path) -> bool:
   return True
 
 
-def purge_models(instance: dict, keep_model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
-  keep = set(keep_model_names)
+def purge_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
   models = all_models(instance)
-  missing = sorted(keep - set(models))
+  names_to_remove = set(model_names) if model_names else set(models)
+  missing = sorted(names_to_remove - set(models))
   if missing:
     raise CliError(f'unknown model(s): {", ".join(missing)}')
 
   output: list[str] = []
-  targets = [model_local_dir(model, settings) for name, model in models.items() if name not in keep]
+  targets = [model_local_dir(model, settings) for name, model in models.items() if name in names_to_remove]
   for target in targets:
     if not is_under(target, settings.model_dir):
       raise CliError(f'refusing to purge path outside model_dir: {target}')

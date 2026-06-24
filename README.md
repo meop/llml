@@ -8,7 +8,7 @@ By default, `llml` expects a config repo at `~/.config/llml/config` and clones t
 
 ```sh
 uv run llml doctor
-uv run llml fetch <instance> [model ...]
+uv run llml pull <instance> [model ...]
 uv run llml purge <instance> [model ...]
 uv run llml serve <instance>
 uv run llml update
@@ -19,17 +19,17 @@ uv run llml update
 Use help at each action level to discover available instances or models:
 
 ```sh
-uv run llml fetch --help
-uv run llml fetch desktop --help
+uv run llml pull --help
+uv run llml pull desktop --help
 ```
 
 ## Actions
 
-`fetch` reads each selected model's `fetch.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to download the exact configured files into `--local-dir`. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
+`pull` reads each selected model's `pull.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
 
 `serve` generates `~/.cache/llml/instances/<instance>/llama-server/models.ini` from models that actually exist on disk, then starts `llama-server` with the instance's configured arguments.
 
-`purge <instance> [model ...]` removes fetched model directories for models not in the keep list. With no model names, it purges every model directory in that instance. Purge refuses to remove paths outside `model_dir`.
+`purge <instance> [model ...]` removes the specified model directories for an instance. With no model names, it purges every model directory in that instance. Purge refuses to remove paths outside `model_dir`.
 
 `update` uses GitPython to clone the config repo if it is missing or pull it if it already exists.
 
@@ -59,7 +59,7 @@ Instance files can use `${LLML_CONFIG_DIR}` and `${LLML_MODEL_DIR}`. `llml` expa
 
 ## Instance Shape
 
-Instances live in `instances/*.toml` inside the config repo. Each instance is a cohesive profile: fetch settings, serve settings, and model definitions all live together. Providers such as `hf` and `llama-server` are baked into the instance and are not CLI arguments.
+Instances live in `instances/*.toml` inside the config repo. Each instance is a cohesive profile: pull settings, serve settings, and model definitions all live together. Providers such as `hf` and `llama-server` are baked into the instance and are not CLI arguments.
 
 ```toml
 [serve.llama-server]
@@ -74,7 +74,7 @@ local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-4-E4B-it-GGUF"
 model-file = "model.gguf"
 mmproj-file = "mmproj.gguf"
 
-[models.gemma-4-e4b.fetch.hf]
+[models.gemma-4-e4b.pull.hf]
 arguments = [
   "${repo}",
   "${model-file}",
