@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from llml.instances import find_instances, load_instance, model_values, write_models_ini
+from llml.instances import find_instances, installed_instances, load_instance, model_values, write_models_ini
 from llml.settings import Settings
 
 
@@ -77,6 +77,58 @@ def test_find_is_case_insensitive(tmp_path: Path) -> None:
   settings = make_find_settings(tmp_path)
 
   assert find_instances(settings, ('DESK', 'GEMMA')) == [('desktop', ['gemma'])]
+
+
+INSTALLED_BODY = """
+[models.gemma]
+local-dir = "${LLML_MODEL_DIR}/gemma"
+[models.gemma.serve.llama-server]
+model = "${local-dir}/gemma.gguf"
+
+[models.qwen]
+local-dir = "${LLML_MODEL_DIR}/qwen"
+[models.qwen.serve.llama-server]
+model = "${local-dir}/qwen.gguf"
+"""
+
+
+def install(settings: Settings, *relative_files: str) -> None:
+  for relative in relative_files:
+    path = settings.model_dir / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('', encoding='utf-8')
+
+
+def test_installed_includes_only_models_present_on_disk(tmp_path: Path) -> None:
+  settings = make_settings(tmp_path, INSTALLED_BODY)
+  install(settings, 'gemma/gemma.gguf')
+
+  assert installed_instances(settings, ()) == [('desktop', ['gemma'])]
+
+
+def test_installed_applies_the_same_term_filter(tmp_path: Path) -> None:
+  settings = make_settings(tmp_path, INSTALLED_BODY)
+  install(settings, 'gemma/gemma.gguf', 'qwen/qwen.gguf')
+
+  assert installed_instances(settings, ('qwen',)) == [('desktop', ['qwen'])]
+
+
+def test_installed_omits_instances_with_nothing_installed(tmp_path: Path) -> None:
+  settings = make_settings(
+    tmp_path,
+    INSTALLED_BODY,
+    instances={
+      'laptop': """
+[models.phi]
+local-dir = "${LLML_MODEL_DIR}/phi"
+[models.phi.serve.llama-server]
+model = "${local-dir}/phi.gguf"
+""",
+    },
+  )
+  install(settings, 'gemma/gemma.gguf')
+
+  assert installed_instances(settings, ()) == [('desktop', ['gemma'])]
 
 
 def test_model_values_expand_shared_model_variables(tmp_path: Path) -> None:

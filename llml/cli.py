@@ -15,7 +15,7 @@ from llml.actions import (
 )
 from llml.repos import refresh_config_repo
 from llml.errors import CliError
-from llml.instances import all_models, find_instances, list_instances, load_instance
+from llml.instances import all_models, find_instances, installed_instances, list_instances, load_instance
 from llml.settings import Settings, load_settings
 
 
@@ -45,6 +45,13 @@ def print_models_help(action: str, instance_name: str, instance: dict) -> None:
 
 def state_from_context(ctx: click.Context) -> State:
   return ctx.find_root().obj
+
+
+def echo_matches(matches: list[tuple[str, list[str]]]) -> None:
+  for name, model_names in matches:
+    click.echo(name)
+    for model_name in model_names:
+      click.echo(f'  {model_name}')
 
 
 def run_with_errors(callback) -> int:
@@ -161,35 +168,21 @@ def tidy(ctx: click.Context) -> None:
 
 
 @root.command(name='list')
+@click.argument('terms', nargs=-1)
 @click.pass_context
-def list_(ctx: click.Context) -> None:
-  """List instances and their models."""
+def list_(ctx: click.Context, terms: tuple[str, ...]) -> None:
+  """List installed instances and models, optionally filtered by terms."""
   state = state_from_context(ctx)
-
-  def command() -> None:
-    for name in list_instances(state.settings):
-      click.echo(name)
-      instance = load_instance(state.settings, name)
-      for model_name in all_models(instance):
-        click.echo(f'  {model_name}')
-
-  run_with_errors(command)
+  run_with_errors(lambda: echo_matches(installed_instances(state.settings, terms)))
 
 
 @root.command()
 @click.argument('terms', nargs=-1)
 @click.pass_context
 def find(ctx: click.Context, terms: tuple[str, ...]) -> None:
-  """Find instances and models matching every given term."""
+  """Find instances and models defined in the config, installed or not."""
   state = state_from_context(ctx)
-
-  def command() -> None:
-    for name, model_names in find_instances(state.settings, terms):
-      click.echo(name)
-      for model_name in model_names:
-        click.echo(f'  {model_name}')
-
-  run_with_errors(command)
+  run_with_errors(lambda: echo_matches(find_instances(state.settings, terms)))
 
 
 @root.command()

@@ -47,18 +47,34 @@ def all_models(instance: dict[str, Any]) -> dict[str, dict[str, Any]]:
   return {name: model for name, model in models.items() if isinstance(model, dict)}
 
 
-def find_instances(settings: Settings, terms: tuple[str, ...]) -> list[tuple[str, list[str]]]:
+def _filter_instances(settings: Settings, terms: tuple[str, ...], candidates) -> list[tuple[str, list[str]]]:
   needles = [term.lower() for term in terms]
   matches: list[tuple[str, list[str]]] = []
   for name in list_instances(settings):
-    model_names = list(all_models(load_instance(settings, name)))
-    if model_names:
-      hit = [model for model in model_names if all(n in f'{name}-{model}'.lower() for n in needles)]
-      if hit:
-        matches.append((name, hit))
-    elif all(n in name.lower() for n in needles):
-      matches.append((name, []))
+    hit = [model for model in candidates(load_instance(settings, name)) if all(n in f'{name}-{model}'.lower() for n in needles)]
+    if hit:
+      matches.append((name, hit))
   return matches
+
+
+def _installed_models(settings: Settings, instance: dict[str, Any]) -> list[str]:
+  names: list[str] = []
+  for model_name, model in all_models(instance).items():
+    try:
+      path = model_file_path(model, settings)
+    except CliError:
+      continue
+    if path is not None and path.exists():
+      names.append(model_name)
+  return names
+
+
+def find_instances(settings: Settings, terms: tuple[str, ...]) -> list[tuple[str, list[str]]]:
+  return _filter_instances(settings, terms, lambda instance: list(all_models(instance)))
+
+
+def installed_instances(settings: Settings, terms: tuple[str, ...]) -> list[tuple[str, list[str]]]:
+  return _filter_instances(settings, terms, lambda instance: _installed_models(settings, instance))
 
 
 def selected_models(instance: dict[str, Any], requested: tuple[str, ...]) -> dict[str, dict[str, Any]]:

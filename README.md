@@ -8,7 +8,7 @@ By default, `llml` expects a config repo at `~/.config/llml/config` and clones t
 
 ```sh
 uv run llml doctor
-uv run llml list
+uv run llml list [term ...]
 uv run llml find [term ...]
 uv run llml sync <instance> [model ...]
 uv run llml remove <instance> [model ...]
@@ -19,15 +19,15 @@ uv run llml refresh
 
 `--dry-run` can appear anywhere in the args and prints the command or action without executing it.
 
-`list` prints each instance with its models indented below it. Use it to discover what to act on before running `sync`, `remove`, or `serve`. `find` is `list` with a filter.
+`find` lists every model defined in the config; `list` lists only the models installed on disk. Both share one output shape (each instance, with its models indented below it) and one filter. Use them to discover what to act on before running `sync`, `remove`, or `serve`.
 
 ## Actions
 
 Each command acts on one of three things: an **instance** (`list`, `find`, `sync`, `remove`, `serve`), the whole **model store** (`tidy`), or the **config repo** (`refresh`). `doctor` reports on the local environment.
 
-`list` reads the config repo and prints each instance with its models indented below it. It never touches disk.
+`find [term ...]` reads the config repo and prints each instance with its models indented below it, whether or not they are installed. For each model it forms the string `<instance>-<model>` and keeps the model only when every term is a substring of it (case-insensitive). Terms are ANDed and order-independent, so `find desktop gemma` and `find gemma desktop` both match the `gemma` model under `desktop`, while `find gemma` matches that model in every instance. With no terms it lists every defined model. It never touches disk beyond reading the config.
 
-`find [term ...]` prints the same instance/model listing as `list`, filtered. For each model it forms the string `<instance>-<model>` and keeps the model only when every term is a substring of it (case-insensitive). Terms are ANDed and order-independent, so `find desktop gemma` and `find gemma desktop` both match the `gemma` model under `desktop`, while `find gemma` matches that model in every instance. With no terms it lists everything, exactly like `list`.
+`list [term ...]` is `find` restricted to models whose files exist on disk. It uses the same `<instance>-<model>` filter, so `list gemma` shows installed `gemma` models and bare `list` shows everything installed. Instances with nothing installed are omitted.
 
 `sync <instance> [model ...]` reads each selected model's `sync.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. With no model names it syncs every model in the instance. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
 
