@@ -71,13 +71,8 @@ def nested_table(node: dict[str, Any], path: tuple[str, ...], label: str) -> dic
   return current
 
 
-def model_pull_hf(model: dict[str, Any]) -> dict[str, Any]:
-  try:
-    return nested_table(model, ('pull', 'hf'), 'model pull.hf config')
-  except CliError as exc:
-    if str(exc) == 'missing model pull.hf config':
-      raise CliError('missing model pull.hf config; run `llml update` if this config repo still uses fetch.hf') from exc
-    raise
+def model_sync_hf(model: dict[str, Any]) -> dict[str, Any]:
+  return nested_table(model, ('sync', 'hf'), 'model sync.hf config')
 
 
 def model_serve_llama_server(model: dict[str, Any]) -> dict[str, Any]:
@@ -100,6 +95,18 @@ def model_values(model: dict[str, Any], settings: Settings) -> dict[str, str]:
 
 def model_local_dir(model: dict[str, Any], settings: Settings) -> Path:
   return Path(model_values(model, settings)['local-dir'])
+
+
+def known_model_dirs(settings: Settings) -> set[Path]:
+  dirs: set[Path] = set()
+  for name in list_instances(settings):
+    instance = load_instance(settings, name)
+    for model in all_models(instance).values():
+      try:
+        dirs.add(model_local_dir(model, settings))
+      except CliError:
+        continue
+  return dirs
 
 
 def model_file_path(model: dict[str, Any], settings: Settings) -> Path | None:

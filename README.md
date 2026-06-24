@@ -8,30 +8,33 @@ By default, `llml` expects a config repo at `~/.config/llml/config` and clones t
 
 ```sh
 uv run llml doctor
-uv run llml pull <instance> [model ...]
-uv run llml purge <instance> [model ...]
+uv run llml list [instance]
+uv run llml sync <instance> [model ...]
+uv run llml remove <instance> [model ...]
+uv run llml tidy
 uv run llml serve <instance>
-uv run llml update
+uv run llml refresh
 ```
 
 `--dry-run` can appear anywhere in the args and prints the command or action without executing it.
 
-Use help at each action level to discover available instances or models:
-
-```sh
-uv run llml pull --help
-uv run llml pull desktop --help
-```
+`list` with no argument prints the available instances. `list <instance>` prints that instance's models and whether each one's file is present on disk. Use `list` to discover what to act on before running `sync`, `remove`, or `serve`.
 
 ## Actions
 
-`pull` reads each selected model's `pull.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
+Each command acts on one of three things: an **instance** (`list`, `sync`, `remove`, `serve`), the whole **model store** (`tidy`), or the **config repo** (`refresh`). `doctor` reports on the local environment.
 
-`serve` generates `~/.cache/llml/instances/<instance>/llama-server/models.ini` from models that actually exist on disk, then starts `llama-server` with the instance's configured arguments.
+`list` reads the config repo and reports instances and per-instance model presence. It never touches disk.
 
-`purge <instance> [model ...]` removes the specified model directories for an instance. With no model names, it purges every model directory in that instance. Purge refuses to remove paths outside `model_dir`.
+`sync <instance> [model ...]` reads each selected model's `sync.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. With no model names it syncs every model in the instance. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
 
-`update` uses GitPython to clone the config repo if it is missing or pull it if it already exists.
+`remove <instance> [model ...]` deletes the named model directories for an instance. With no model names, it deletes every model directory in that instance. It refuses to delete paths outside `model_dir`. `remove` is targeted: you name what goes.
+
+`tidy` reconciles `model_dir` against the model definitions across every instance. It collects the `local-dir` of every model in every instance, keeps those directories (and the parent folders leading to them, such as a shared `unsloth/` org folder), and deletes everything else under `model_dir` — orphaned content from models that were dropped from a definition, as well as files and folders that never belonged to any instance. Unlike `remove`, `tidy` is not scoped to a single instance; it cleans the whole `model_dir` based on what is still defined. Run `refresh` first so it reconciles against current definitions, and use `--dry-run` to preview the removals.
+
+`serve <instance>` generates `~/.cache/llml/instances/<instance>/llama-server/models.ini` from models that actually exist on disk, then starts `llama-server` with the instance's configured arguments.
+
+`refresh` uses GitPython to clone the config repo if it is missing or refresh it from the remote if it already exists.
 
 ## Configuration
 
@@ -59,7 +62,7 @@ Instance files can use `${LLML_CONFIG_DIR}` and `${LLML_MODEL_DIR}`. `llml` expa
 
 ## Instance Shape
 
-Instances live in `instances/*.toml` inside the config repo. Each instance is a cohesive profile: pull settings, serve settings, and model definitions all live together. Providers such as `hf` and `llama-server` are baked into the instance and are not CLI arguments.
+Instances live in `instances/*.toml` inside the config repo. Each instance is a cohesive profile: sync settings, serve settings, and model definitions all live together. Providers such as `hf` and `llama-server` are baked into the instance and are not CLI arguments.
 
 ```toml
 [serve.llama-server]
@@ -74,7 +77,7 @@ local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-4-E4B-it-GGUF"
 model-file = "model.gguf"
 mmproj-file = "mmproj.gguf"
 
-[models.gemma-4-e4b.pull.hf]
+[models.gemma-4-e4b.sync.hf]
 arguments = [
   "${repo}",
   "${model-file}",

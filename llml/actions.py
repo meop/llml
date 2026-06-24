@@ -10,7 +10,9 @@ from llml.errors import CliError
 from llml.instances import (
   all_models,
   expand_arg_list,
-  model_pull_hf,
+  known_model_dirs,
+  model_file_path,
+  model_sync_hf,
   model_local_dir,
   model_values,
   nested_table,
@@ -33,7 +35,7 @@ def hf_command_preview(arguments: list[str]) -> str:
 
 def parse_hf_download_args(arguments: list[str]) -> tuple[str, list[str], Path]:
   if not arguments:
-    raise CliError('model pull.hf arguments must start with a repo id')
+    raise CliError('model sync.hf arguments must start with a repo id')
 
   repo_id = arguments[0]
   files: list[str] = []
@@ -48,7 +50,7 @@ def parse_hf_download_args(arguments: list[str]) -> tuple[str, list[str], Path]:
         raise CliError('--local-dir needs a value')
       local_dir = Path(arguments[index])
     elif arg.startswith('--'):
-      raise CliError(f'unsupported hf argument for library pull: {arg}')
+      raise CliError(f'unsupported hf argument for library sync: {arg}')
     else:
       files.append(arg)
     index += 1
@@ -58,13 +60,13 @@ def parse_hf_download_args(arguments: list[str]) -> tuple[str, list[str], Path]:
   return repo_id, files, local_dir
 
 
-def pull_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
+def sync_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
   output: list[str] = []
   for _, model in selected_models(instance, model_names).items():
-    hf = model_pull_hf(model)
+    hf = model_sync_hf(model)
     arguments = hf.get('arguments')
     if not isinstance(arguments, list):
-      raise CliError('model pull.hf needs an arguments list')
+      raise CliError('model sync.hf needs an arguments list')
 
     expanded = expand_arg_list(arguments, model_values(model, settings))
     if dry_run:
@@ -73,7 +75,7 @@ def pull_models(instance: dict, model_names: tuple[str, ...], settings: Settings
 
     repo_id, files, local_dir = parse_hf_download_args(expanded)
     snapshot_download(repo_id=repo_id, allow_patterns=files or None, local_dir=str(local_dir), token=settings.hf_token)
-    output.append(f'pulled {repo_id} to {local_dir}')
+    output.append(f'synced {repo_id} to {local_dir}')
   return output
 
 
@@ -98,7 +100,7 @@ def is_under(path: Path, parent: Path) -> bool:
   return True
 
 
-def purge_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
+def remove_models(instance: dict, model_names: tuple[str, ...], settings: Settings, dry_run: bool) -> list[str]:
   models = all_models(instance)
   names_to_remove = set(model_names) if model_names else set(models)
   missing = sorted(names_to_remove - set(models))
@@ -109,13 +111,68 @@ def purge_models(instance: dict, model_names: tuple[str, ...], settings: Setting
   targets = [model_local_dir(model, settings) for name, model in models.items() if name in names_to_remove]
   for target in targets:
     if not is_under(target, settings.model_dir):
-      raise CliError(f'refusing to purge path outside model_dir: {target}')
+      raise CliError(f'refusing to remove path outside model_dir: {target}')
     if dry_run:
       output.append(f'would remove {target}')
     elif target.exists():
       shutil.rmtree(target)
       output.append(f'removed {target}')
   return output
+
+
+def tidy_targets(model_dir: Path, known: set[Path]) -> list[Path]:
+  root = model_dir.resolve(strict=False)
+  known_resolved = {path.resolve(strict=False) for path in known}
+
+  keep_ancestors: set[Path] = set()
+  for path in known_resolved:
+    parent = path.parent
+    while is_under(parent, model_dir) and parent.resolve(strict=False) != root:
+      keep_ancestors.add(parent.resolve(strict=False))
+      parent = parent.parent
+
+  removals: list[Path] = []
+
+  def walk(current: Path) -> None:
+    for child in sorted(current.iterdir()):
+      resolved = child.resolve(strict=False)
+      if resolved in known_resolved:
+        continue
+      if resolved in keep_ancestors:
+        walk(child)
+      else:
+        removals.append(child)
+
+  walk(model_dir)
+  return removals
+
+
+def tidy_model_dir(settings: Settings, dry_run: bool) -> list[str]:
+  model_dir = settings.model_dir
+  if not model_dir.is_dir():
+    return []
+
+  output: list[str] = []
+  for target in tidy_targets(model_dir, known_model_dirs(settings)):
+    if not is_under(target, model_dir):
+      raise CliError(f'refusing to tidy path outside model_dir: {target}')
+    if dry_run:
+      output.append(f'would remove {target}')
+    elif target.is_dir() and not target.is_symlink():
+      shutil.rmtree(target)
+      output.append(f'removed {target}')
+    else:
+      target.unlink()
+      output.append(f'removed {target}')
+  return output
+
+
+def instance_model_status(instance: dict, settings: Settings) -> list[tuple[str, bool]]:
+  status: list[tuple[str, bool]] = []
+  for name, model in all_models(instance).items():
+    path = model_file_path(model, settings)
+    status.append((name, path is not None and path.exists()))
+  return status
 
 
 def executable_version(name: str) -> tuple[str | None, str | None]:

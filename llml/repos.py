@@ -25,7 +25,7 @@ def ensure_config_repo(settings: Settings) -> Path:
   return settings.config_dir
 
 
-def update_config_repo(settings: Settings, dry_run: bool = False) -> str:
+def refresh_config_repo(settings: Settings, dry_run: bool = False) -> str:
   if not settings.config_dir.exists():
     if dry_run:
       return f'would clone {settings.config_uri} to {settings.config_dir}'
@@ -38,9 +38,9 @@ def update_config_repo(settings: Settings, dry_run: bool = False) -> str:
     raise CliError(f'config_dir is not a git repo: {settings.config_dir}') from exc
 
   if dry_run:
-    return f'would pull {settings.config_dir}'
+    return f'would refresh {settings.config_dir}'
 
   if not repo.remotes:
     raise CliError(f'config repo has no remotes: {settings.config_dir}')
   repo.remotes.origin.pull()
-  return f'updated {settings.config_dir}'
+  return f'refreshed {settings.config_dir}'

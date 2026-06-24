@@ -5,8 +5,16 @@ from importlib.metadata import PackageNotFoundError, version
 import click
 from git import GitCommandNotFound
 
-from llml.actions import app_version, executable_version, pull_models, purge_models, serve_instance
-from llml.repos import update_config_repo
+from llml.actions import (
+  app_version,
+  executable_version,
+  instance_model_status,
+  remove_models,
+  serve_instance,
+  sync_models,
+  tidy_model_dir,
+)
+from llml.repos import refresh_config_repo
 from llml.errors import CliError
 from llml.instances import all_models, list_instances, load_instance
 from llml.settings import Settings, load_settings
@@ -19,7 +27,7 @@ class State:
 
 
 def print_instances_help(action: str, settings: Settings) -> None:
-  suffix = ' [model ...]' if action in {'pull', 'purge'} else ''
+  suffix = ' [model ...]' if action in {'sync', 'remove'} else ''
   click.echo(f'usage: llml {action} <instance>{suffix}')
   click.echo()
   click.echo('instances:')
@@ -28,7 +36,7 @@ def print_instances_help(action: str, settings: Settings) -> None:
 
 
 def print_models_help(action: str, instance_name: str, instance: dict) -> None:
-  suffix = ' [model ...]' if action in {'pull', 'purge'} else ''
+  suffix = ' [model ...]' if action in {'sync', 'remove'} else ''
   click.echo(f'usage: llml {action} {instance_name}{suffix}')
   click.echo()
   click.echo('models:')
@@ -64,21 +72,21 @@ def root(ctx: click.Context, dry_run: bool) -> None:
 @click.argument('instance_name', required=False)
 @click.argument('model_names', nargs=-1)
 @click.pass_context
-def pull(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
-  """Pull model files for an instance."""
+def sync(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
+  """Sync an instance's model files to disk."""
   state = state_from_context(ctx)
 
   def command() -> None:
     if help_requested or instance_name is None:
       if instance_name is None:
-        print_instances_help('pull', state.settings)
+        print_instances_help('sync', state.settings)
         return
       instance = load_instance(state.settings, instance_name)
-      print_models_help('pull', instance_name, instance)
+      print_models_help('sync', instance_name, instance)
       return
 
     instance = load_instance(state.settings, instance_name)
-    for line in pull_models(instance, model_names, state.settings, state.dry_run):
+    for line in sync_models(instance, model_names, state.settings, state.dry_run):
       click.echo(line)
 
   run_with_errors(command)
@@ -89,7 +97,7 @@ def pull(ctx: click.Context, help_requested: bool, instance_name: str | None, mo
 @click.argument('instance_name', required=False)
 @click.pass_context
 def serve(ctx: click.Context, help_requested: bool, instance_name: str | None) -> None:
-  """Start the serving provider for an instance."""
+  """Serve an instance with llama-server."""
   state = state_from_context(ctx)
 
   def command() -> None:
@@ -116,21 +124,21 @@ def serve(ctx: click.Context, help_requested: bool, instance_name: str | None) -
 @click.argument('instance_name', required=False)
 @click.argument('model_names', nargs=-1)
 @click.pass_context
-def purge(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
-  """Remove selected model directories for an instance."""
+def remove(ctx: click.Context, help_requested: bool, instance_name: str | None, model_names: tuple[str, ...]) -> None:
+  """Delete an instance's model directories."""
   state = state_from_context(ctx)
 
   def command() -> None:
     if help_requested or instance_name is None:
       if instance_name is None:
-        print_instances_help('purge', state.settings)
+        print_instances_help('remove', state.settings)
         return
       instance = load_instance(state.settings, instance_name)
-      print_models_help('purge', instance_name, instance)
+      print_models_help('remove', instance_name, instance)
       return
 
     instance = load_instance(state.settings, instance_name)
-    for line in purge_models(instance, model_names, state.settings, state.dry_run):
+    for line in remove_models(instance, model_names, state.settings, state.dry_run):
       click.echo(line)
 
   run_with_errors(command)
@@ -138,16 +146,54 @@ def purge(ctx: click.Context, help_requested: bool, instance_name: str | None, m
 
 @root.command()
 @click.pass_context
-def update(ctx: click.Context) -> None:
-  """Clone or pull the configured config repo."""
+def tidy(ctx: click.Context) -> None:
+  """Clean model content no instance defines anymore."""
   state = state_from_context(ctx)
-  run_with_errors(lambda: click.echo(update_config_repo(state.settings, state.dry_run)))
+
+  def command() -> None:
+    lines = tidy_model_dir(state.settings, state.dry_run)
+    if not lines:
+      click.echo('model dir is already tidy')
+      return
+    for line in lines:
+      click.echo(line)
+
+  run_with_errors(command)
+
+
+@root.command(name='list')
+@click.argument('instance_name', required=False)
+@click.pass_context
+def list_(ctx: click.Context, instance_name: str | None) -> None:
+  """List instances, or one instance's models and what's on disk."""
+  state = state_from_context(ctx)
+
+  def command() -> None:
+    if instance_name is None:
+      for name in list_instances(state.settings):
+        click.echo(name)
+      return
+    instance = load_instance(state.settings, instance_name)
+    status = instance_model_status(instance, state.settings)
+    width = max((len(name) for name, _ in status), default=0)
+    for name, present in status:
+      click.echo(f'{name.ljust(width)}  {"present" if present else "missing"}')
+
+  run_with_errors(command)
+
+
+@root.command()
+@click.pass_context
+def refresh(ctx: click.Context) -> None:
+  """Refresh the config repo, cloning it if missing."""
+  state = state_from_context(ctx)
+  run_with_errors(lambda: click.echo(refresh_config_repo(state.settings, state.dry_run)))
 
 
 @root.command()
 @click.pass_context
 def doctor(ctx: click.Context) -> None:
-  """Print local setup diagnostics."""
+  """Show config and environment diagnostics."""
   state = state_from_context(ctx)
 
   def command() -> None:
