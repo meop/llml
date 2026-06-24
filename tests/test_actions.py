@@ -121,6 +121,32 @@ model = "${local-dir}/${model-file}"
   assert calls[0]['token'] == 'secret-token'
 
 
+def test_pull_reports_stale_fetch_config(tmp_path: Path) -> None:
+  settings, _ = make_config_repo(
+    tmp_path,
+    """
+[models.gemma]
+repo = "unsloth/gemma-GGUF"
+local-dir = "${LLML_MODEL_DIR}/unsloth/gemma-GGUF"
+model-file = "gemma.gguf"
+
+[models.gemma.fetch.hf]
+arguments = [
+  "${repo}",
+  "${model-file}",
+  "--local-dir ${local-dir}",
+]
+
+[models.gemma.serve.llama-server]
+model = "${local-dir}/${model-file}"
+""",
+  )
+  instance = load_instance(settings, 'desktop')
+
+  with pytest.raises(CliError, match='run `llml update`'):
+    pull_models(instance, ('gemma',), settings, dry_run=True)
+
+
 def test_purge_removes_only_named_models(tmp_path: Path) -> None:
   settings, model_dir = make_config_repo(
     tmp_path,

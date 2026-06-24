@@ -63,14 +63,21 @@ def nested_table(node: dict[str, Any], path: tuple[str, ...], label: str) -> dic
   for key in path:
     if not isinstance(current, dict):
       raise CliError(f'{label} must be a table')
-    current = current.get(key)
+    if key not in current:
+      raise CliError(f'missing {label}')
+    current = current[key]
   if not isinstance(current, dict):
     raise CliError(f'missing {label}')
   return current
 
 
 def model_pull_hf(model: dict[str, Any]) -> dict[str, Any]:
-  return nested_table(model, ('pull', 'hf'), 'model pull.hf config')
+  try:
+    return nested_table(model, ('pull', 'hf'), 'model pull.hf config')
+  except CliError as exc:
+    if str(exc) == 'missing model pull.hf config':
+      raise CliError('missing model pull.hf config; run `llml update` if this config repo still uses fetch.hf') from exc
+    raise
 
 
 def model_serve_llama_server(model: dict[str, Any]) -> dict[str, Any]:
