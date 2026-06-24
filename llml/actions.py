@@ -11,7 +11,6 @@ from llml.instances import (
   all_models,
   expand_arg_list,
   known_model_dirs,
-  model_file_path,
   model_sync_hf,
   model_local_dir,
   model_values,
@@ -165,14 +164,6 @@ def tidy_model_dir(settings: Settings, dry_run: bool) -> list[str]:
       target.unlink()
       output.append(f'removed {target}')
   return output
-
-
-def instance_model_status(instance: dict, settings: Settings) -> list[tuple[str, bool]]:
-  status: list[tuple[str, bool]] = []
-  for name, model in all_models(instance).items():
-    path = model_file_path(model, settings)
-    status.append((name, path is not None and path.exists()))
-  return status
 
 
 def executable_version(name: str) -> tuple[str | None, str | None]:

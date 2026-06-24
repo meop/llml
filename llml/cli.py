@@ -8,7 +8,6 @@ from git import GitCommandNotFound
 from llml.actions import (
   app_version,
   executable_version,
-  instance_model_status,
   remove_models,
   serve_instance,
   sync_models,
@@ -162,22 +161,17 @@ def tidy(ctx: click.Context) -> None:
 
 
 @root.command(name='list')
-@click.argument('instance_name', required=False)
 @click.pass_context
-def list_(ctx: click.Context, instance_name: str | None) -> None:
-  """List instances, or one instance's models and what's on disk."""
+def list_(ctx: click.Context) -> None:
+  """List instances and their models."""
   state = state_from_context(ctx)
 
   def command() -> None:
-    if instance_name is None:
-      for name in list_instances(state.settings):
-        click.echo(name)
-      return
-    instance = load_instance(state.settings, instance_name)
-    status = instance_model_status(instance, state.settings)
-    width = max((len(name) for name, _ in status), default=0)
-    for name, present in status:
-      click.echo(f'{name.ljust(width)}  {"present" if present else "missing"}')
+    for name in list_instances(state.settings):
+      click.echo(name)
+      instance = load_instance(state.settings, name)
+      for model_name in all_models(instance):
+        click.echo(f'  {model_name}')
 
   run_with_errors(command)
 

@@ -8,7 +8,7 @@ By default, `llml` expects a config repo at `~/.config/llml/config` and clones t
 
 ```sh
 uv run llml doctor
-uv run llml list [instance]
+uv run llml list
 uv run llml sync <instance> [model ...]
 uv run llml remove <instance> [model ...]
 uv run llml tidy
@@ -18,13 +18,13 @@ uv run llml refresh
 
 `--dry-run` can appear anywhere in the args and prints the command or action without executing it.
 
-`list` with no argument prints the available instances. `list <instance>` prints that instance's models and whether each one's file is present on disk. Use `list` to discover what to act on before running `sync`, `remove`, or `serve`.
+`list` prints each instance with its models indented below it. Use it to discover what to act on before running `sync`, `remove`, or `serve`.
 
 ## Actions
 
 Each command acts on one of three things: an **instance** (`list`, `sync`, `remove`, `serve`), the whole **model store** (`tidy`), or the **config repo** (`refresh`). `doctor` reports on the local environment.
 
-`list` reads the config repo and reports instances and per-instance model presence. It never touches disk.
+`list` reads the config repo and prints each instance with its models indented below it. It never touches disk.
 
 `sync <instance> [model ...]` reads each selected model's `sync.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. With no model names it syncs every model in the instance. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
 
