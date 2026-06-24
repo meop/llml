@@ -66,7 +66,7 @@ def run_with_errors(callback) -> int:
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
 @click.version_option(version=app_version(), prog_name='llml')
-@click.option('--dry-run', is_flag=True, help='Print what would happen without making changes.')
+@click.option('-n', '--dry-run', is_flag=True, help='Print what would happen without making changes.')
 @click.pass_context
 def root(ctx: click.Context, dry_run: bool) -> None:
   inherited = ctx.obj or {}
@@ -223,8 +223,9 @@ def doctor(ctx: click.Context) -> None:
 
 def main(argv: list[str] | None = None) -> int:
   args = list(sys.argv[1:] if argv is None else argv)
-  dry_run = '--dry-run' in args
-  args = [arg for arg in args if arg != '--dry-run']
+  dry_run_flags = {'-n', '--dry-run'}
+  dry_run = any(arg in dry_run_flags for arg in args)
+  args = [arg for arg in args if arg not in dry_run_flags]
   try:
     return root.main(args=args, prog_name='llml', standalone_mode=False, obj={'dry_run': dry_run})
   except click.ClickException as exc:

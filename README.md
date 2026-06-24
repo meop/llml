@@ -17,7 +17,7 @@ uv run llml serve <instance>
 uv run llml refresh
 ```
 
-`--dry-run` can appear anywhere in the args and prints the command or action without executing it.
+`--dry-run` (or `-n`) can appear anywhere in the args and prints the command or action without executing it.
 
 `find` lists every model defined in the config; `list` lists only the models installed on disk. Both share one output shape (each instance, with its models indented below it) and one filter. Use them to discover what to act on before running `sync`, `remove`, or `serve`.
 
