@@ -6,11 +6,16 @@ from llml.errors import CliError
 from llml.settings import Settings
 
 
+def is_empty_dir(path: Path) -> bool:
+  return path.is_dir() and next(path.iterdir(), None) is None
+
+
 def ensure_config_repo(settings: Settings) -> Path:
   if settings.config_dir.exists():
-    if not (settings.config_dir / '.git').exists():
+    if (settings.config_dir / '.git').exists():
+      return settings.config_dir
+    if not is_empty_dir(settings.config_dir):
       raise CliError(f'config_dir exists but is not a git repo: {settings.config_dir}')
-    return settings.config_dir
 
   settings.config_dir.parent.mkdir(parents=True, exist_ok=True)
   try:
