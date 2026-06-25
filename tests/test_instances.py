@@ -8,8 +8,9 @@ from llml.instances import (
   installed_instances,
   load_instance,
   model_values,
-  resolve_instance,
-  resolve_models,
+  pinpoint_installed_model,
+  pinpoint_instance,
+  wide_models,
   write_models_ini,
 )
 from llml.settings import Settings
@@ -142,7 +143,7 @@ model = "${local-dir}/phi.gguf"
   assert installed_instances(settings, ()) == [('desktop', ['gemma'])]
 
 
-RESOLVE_BODY = """
+WIDE_BODY = """
 [models.gemma]
 local-dir = "x"
 [models.gemma-lite]
@@ -152,71 +153,117 @@ local-dir = "z"
 """
 
 
-def make_resolve_settings(tmp_path: Path) -> Settings:
-  return make_settings(tmp_path, RESOLVE_BODY, instances={'desktop-lite': RESOLVE_BODY})
+def make_wide_settings(tmp_path: Path) -> Settings:
+  return make_settings(tmp_path, WIDE_BODY, instances={'desktop-lite': WIDE_BODY})
 
 
-def test_resolve_instance_exact_wins_over_substring(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
+def test_wide_models_no_terms_returns_every_pair(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
 
-  assert resolve_instance(settings, 'desktop') == 'desktop'
-  assert resolve_instance(settings, 'DESKTOP') == 'desktop'
-
-
-def test_resolve_instance_unique_substring(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-
-  assert resolve_instance(settings, 'lite') == 'desktop-lite'
-
-
-def test_resolve_instance_ambiguous_substring_errors(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-
-  with pytest.raises(CliError, match='ambiguous instance'):
-    resolve_instance(settings, 'desk')
+  assert wide_models(settings, ()) == [
+    ('desktop', 'gemma'),
+    ('desktop', 'gemma-lite'),
+    ('desktop', 'qwen'),
+    ('desktop-lite', 'gemma'),
+    ('desktop-lite', 'gemma-lite'),
+    ('desktop-lite', 'qwen'),
+  ]
 
 
-def test_resolve_instance_unknown_errors(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
+def test_wide_models_term_does_not_short_circuit_on_exact(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
 
-  with pytest.raises(CliError, match='unknown instance'):
-    resolve_instance(settings, 'server')
-
-
-def test_resolve_models_exact_wins_over_glob(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-  instance = load_instance(settings, 'desktop')
-
-  assert resolve_models(instance, ('gemma',)) == ('gemma',)
+  # 'gemma' is an exact model name but WIDE still keeps every substring match.
+  assert wide_models(settings, ('gemma',)) == [
+    ('desktop', 'gemma'),
+    ('desktop', 'gemma-lite'),
+    ('desktop-lite', 'gemma'),
+    ('desktop-lite', 'gemma-lite'),
+  ]
 
 
-def test_resolve_models_substring_globs_multiple(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-  instance = load_instance(settings, 'desktop')
+def test_wide_models_ands_terms(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
 
-  assert resolve_models(instance, ('gem',)) == ('gemma', 'gemma-lite')
-
-
-def test_resolve_models_unions_and_dedupes_across_terms(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-  instance = load_instance(settings, 'desktop')
-
-  assert resolve_models(instance, ('gem', 'GEMMA')) == ('gemma', 'gemma-lite')
+  assert wide_models(settings, ('lite', 'gemma')) == [
+    ('desktop', 'gemma-lite'),
+    ('desktop-lite', 'gemma'),
+    ('desktop-lite', 'gemma-lite'),
+  ]
 
 
-def test_resolve_models_no_terms_returns_all(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-  instance = load_instance(settings, 'desktop')
+PINPOINT_BODY = """
+[models.gemma]
+local-dir = "${LLML_MODEL_DIR}/gemma"
+[models.gemma.serve.llama-server]
+model = "${local-dir}/gemma.gguf"
+[models.gemma-lite]
+local-dir = "${LLML_MODEL_DIR}/gemma-lite"
+[models.gemma-lite.serve.llama-server]
+model = "${local-dir}/gemma-lite.gguf"
+[models.qwen]
+local-dir = "${LLML_MODEL_DIR}/qwen"
+[models.qwen.serve.llama-server]
+model = "${local-dir}/qwen.gguf"
+"""
 
-  assert resolve_models(instance, ()) == ('gemma', 'gemma-lite', 'qwen')
+
+def make_pinpoint_settings(tmp_path: Path) -> Settings:
+  settings = make_settings(tmp_path, PINPOINT_BODY, instances={'desktop-lite': PINPOINT_BODY})
+  install(settings, 'gemma/gemma.gguf', 'gemma-lite/gemma-lite.gguf', 'qwen/qwen.gguf')
+  return settings
 
 
-def test_resolve_models_unknown_errors(tmp_path: Path) -> None:
-  settings = make_resolve_settings(tmp_path)
-  instance = load_instance(settings, 'desktop')
+def test_pinpoint_model_prefers_exact_over_substring(tmp_path: Path) -> None:
+  settings = make_pinpoint_settings(tmp_path)
 
-  with pytest.raises(CliError, match='unknown model'):
-    resolve_models(instance, ('llama',))
+  assert pinpoint_installed_model(settings, ('gemma',)) == ('desktop', 'gemma')
+
+
+def test_pinpoint_model_no_exact_takes_first_by_stable_sort(tmp_path: Path) -> None:
+  settings = make_pinpoint_settings(tmp_path)
+
+  assert pinpoint_installed_model(settings, ('gem',)) == ('desktop', 'gemma')
+
+
+def test_pinpoint_model_ands_terms_then_pinpoints(tmp_path: Path) -> None:
+  settings = make_pinpoint_settings(tmp_path)
+
+  # 'lite' + 'gemma' narrows to lite-instance pairs; exact model 'gemma' then wins.
+  assert pinpoint_installed_model(settings, ('lite', 'gemma')) == ('desktop-lite', 'gemma')
+
+
+def test_pinpoint_model_skips_uninstalled(tmp_path: Path) -> None:
+  settings = make_settings(tmp_path, PINPOINT_BODY)
+  install(settings, 'qwen/qwen.gguf')
+
+  with pytest.raises(CliError, match='no installed model matches'):
+    pinpoint_installed_model(settings, ('gemma',))
+
+
+def test_pinpoint_instance_prefers_exact(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
+
+  assert pinpoint_instance(settings, ('desktop',)) == 'desktop'
+
+
+def test_pinpoint_instance_no_exact_takes_first(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
+
+  assert pinpoint_instance(settings, ('desk',)) == 'desktop'
+
+
+def test_pinpoint_instance_unique_substring(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
+
+  assert pinpoint_instance(settings, ('lite',)) == 'desktop-lite'
+
+
+def test_pinpoint_instance_no_match_errors(tmp_path: Path) -> None:
+  settings = make_wide_settings(tmp_path)
+
+  with pytest.raises(CliError, match='no instance matches'):
+    pinpoint_instance(settings, ('nope',))
 
 
 def test_model_values_expand_shared_model_variables(tmp_path: Path) -> None:

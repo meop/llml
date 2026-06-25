@@ -10,36 +10,37 @@ By default, `llml` expects a config repo at `~/.config/llml/config` and clones t
 uv run llml doctor
 uv run llml list [term ...]
 uv run llml find [term ...]
-uv run llml sync <instance> [model ...]
-uv run llml remove <instance> [model ...]
+uv run llml sync [term ...]
+uv run llml remove <term ...>
 uv run llml tidy
-uv run llml serve <instance>
+uv run llml serve <term ...>
 uv run llml refresh
 ```
 
 `--dry-run` (or `-n`) can appear anywhere in the args and prints the command or action without executing it.
 
-`find` lists every model defined in the config; `list` lists only the models installed on disk. Both share one output shape (each instance, with its models indented below it) and one filter. Use them to discover what to act on before running `sync`, `remove`, or `serve`.
+## Matching: WIDE and PINPOINT
 
-The `<instance>` and `[model ...]` arguments to `sync`, `remove`, and `serve` are matched loosely: case-insensitive, by substring, so you do not need the full name. The rule is that an exact (case-insensitive) match short-circuits substring matching — if a term equals a name exactly, only that name is used; otherwise the term matches every name it is a substring of.
+Every command that takes `[term ...]` matches the same way: a model's identity is the string `<instance>-<model>`, terms are matched case-insensitively by substring, and multiple terms are ANDed (each must match, narrowing the set). What differs is how many matches a command acts on:
 
-So with instances `desktop` and `desktop-lite`: `desktop` selects only `desktop`, while `desk` matches both and is reported as ambiguous. An instance argument must resolve to exactly one instance. A model argument may resolve to several, and each match is acted on: `remove desktop gem` removes both `gemma` and `gemma-lite`, but `remove desktop gemma` removes only `gemma` because the exact match short-circuits the glob.
+- **WIDE** — act on **all** matches; no terms means everything. Used by the read-only and bulk-idempotent commands: `find`, `list`, `sync`.
+- **PINPOINT** — narrow with the same match, then reduce to **one**: prefer an exact name match, otherwise take the first by stable sort. Used by the single-effect and destructive commands: `serve` (one instance), `remove` (one model).
+
+Exact-match is only the tie-breaker inside PINPOINT, not a separate mode. So `sync gemma` (WIDE) downloads every `gemma*` model in every instance, while `remove gemma` (PINPOINT) removes exactly one — the model named exactly `gemma` if there is one, else the first match. `remove` and `serve` require at least one term; use `find` and `list` to see what is available.
 
 ## Actions
 
-Each command acts on one of three things: an **instance** (`list`, `find`, `sync`, `remove`, `serve`), the whole **model store** (`tidy`), or the **config repo** (`refresh`). `doctor` reports on the local environment.
+`find [term ...]` (WIDE) reads the config repo and prints each instance with its models indented below it, whether or not they are installed. With no terms it lists every defined model. It never touches disk beyond reading the config.
 
-`find [term ...]` reads the config repo and prints each instance with its models indented below it, whether or not they are installed. For each model it forms the string `<instance>-<model>` and keeps the model only when every term is a substring of it (case-insensitive). Terms are ANDed and order-independent, so `find desktop gemma` and `find gemma desktop` both match the `gemma` model under `desktop`, while `find gemma` matches that model in every instance. With no terms it lists every defined model. It never touches disk beyond reading the config.
+`list [term ...]` (WIDE) is `find` restricted to models whose files exist on disk. So `list gemma` shows installed `gemma*` models and bare `list` shows everything installed. Instances with nothing installed are omitted.
 
-`list [term ...]` is `find` restricted to models whose files exist on disk. It uses the same `<instance>-<model>` filter, so `list gemma` shows installed `gemma` models and bare `list` shows everything installed. Instances with nothing installed are omitted.
+`sync [term ...]` (WIDE) downloads every matched model. For each one it reads the model's `sync.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. With no terms it syncs every model in every instance. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
 
-`sync <instance> [model ...]` reads each selected model's `sync.hf.arguments`, keeps the CLI-shaped command visible for dry runs, then uses `huggingface_hub.snapshot_download` to reconcile the exact configured files into `--local-dir`. With no model names it syncs every model in the instance. If `hf_token` is set in `llml` config, it is passed to the library. Otherwise the library uses its normal auth mechanisms, such as `HF_TOKEN` or `huggingface-cli login`.
+`remove <term ...>` (PINPOINT) deletes one installed model's directory — the single model the terms pinpoint. It refuses to delete paths outside `model_dir`, and requires at least one term so it never deletes by accident.
 
-`remove <instance> [model ...]` deletes the named model directories for an instance. With no model names, it deletes every model directory in that instance. It refuses to delete paths outside `model_dir`. `remove` is targeted: you name what goes.
+`tidy` reconciles `model_dir` against the model definitions across every instance. It collects the `local-dir` of every model in every instance, keeps those directories (and the parent folders leading to them, such as a shared `unsloth/` org folder), and deletes everything else under `model_dir` — orphaned content from models that were dropped from a definition, as well as files and folders that never belonged to any instance. Unlike `remove`, `tidy` is not pinpointed; it cleans the whole `model_dir` based on what is still defined. Run `refresh` first so it reconciles against current definitions, and use `--dry-run` to preview the removals.
 
-`tidy` reconciles `model_dir` against the model definitions across every instance. It collects the `local-dir` of every model in every instance, keeps those directories (and the parent folders leading to them, such as a shared `unsloth/` org folder), and deletes everything else under `model_dir` — orphaned content from models that were dropped from a definition, as well as files and folders that never belonged to any instance. Unlike `remove`, `tidy` is not scoped to a single instance; it cleans the whole `model_dir` based on what is still defined. Run `refresh` first so it reconciles against current definitions, and use `--dry-run` to preview the removals.
-
-`serve <instance>` generates `~/.cache/llml/instances/<instance>/llama-server/models.ini` from models that actually exist on disk, then starts `llama-server` with the instance's configured arguments.
+`serve <term ...>` (PINPOINT) generates `~/.cache/llml/instances/<instance>/llama-server/models.ini` for the one instance the terms pinpoint, from models that actually exist on disk, then starts `llama-server` with that instance's configured arguments.
 
 `refresh` uses GitPython to clone the config repo if it is missing or refresh it from the remote if it already exists.
 

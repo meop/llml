@@ -88,35 +88,40 @@ def selected_models(instance: dict[str, Any], requested: tuple[str, ...]) -> dic
   return {name: models[name] for name in requested}
 
 
-def _loose_match(term: str, names: list[str]) -> list[str]:
-  lowered = term.lower()
-  exact = [name for name in names if name.lower() == lowered]
-  if exact:
-    return exact
-  return [name for name in names if lowered in name.lower()]
+def _pairs(settings: Settings, terms: tuple[str, ...], candidates) -> list[tuple[str, str]]:
+  return [(name, model) for name, models in _filter_instances(settings, terms, candidates) for model in models]
 
 
-def resolve_instance(settings: Settings, term: str) -> str:
-  matched = _loose_match(term, list_instances(settings))
+def _pinpoint(pairs: list[tuple[str, str]], terms: tuple[str, ...]) -> tuple[str, str] | None:
+  if not pairs:
+    return None
+  if len(pairs) == 1:
+    return pairs[0]
+  lowered = {term.lower() for term in terms}
+  exact = [pair for pair in pairs if pair[1].lower() in lowered or f'{pair[0]}-{pair[1]}'.lower() in lowered]
+  return sorted(exact or pairs)[0]
+
+
+def wide_models(settings: Settings, terms: tuple[str, ...]) -> list[tuple[str, str]]:
+  return _pairs(settings, terms, lambda instance: list(all_models(instance)))
+
+
+def pinpoint_installed_model(settings: Settings, terms: tuple[str, ...]) -> tuple[str, str]:
+  pair = _pinpoint(_pairs(settings, terms, lambda instance: _installed_models(settings, instance)), terms)
+  if pair is None:
+    raise CliError(f'no installed model matches: {" ".join(terms)}')
+  return pair
+
+
+def pinpoint_instance(settings: Settings, terms: tuple[str, ...]) -> str:
+  needles = [term.lower() for term in terms]
+  matched = [name for name in list_instances(settings) if all(n in name.lower() for n in needles)]
+  if not matched:
+    raise CliError(f'no instance matches: {" ".join(terms)}')
   if len(matched) == 1:
     return matched[0]
-  if not matched:
-    raise CliError(f'unknown instance: {term}')
-  raise CliError(f'ambiguous instance "{term}": matches {", ".join(matched)}')
-
-
-def resolve_models(instance: dict[str, Any], terms: tuple[str, ...]) -> tuple[str, ...]:
-  names = list(all_models(instance))
-  if not terms:
-    return tuple(names)
-
-  resolved: list[str] = []
-  for term in terms:
-    matched = _loose_match(term, names)
-    if not matched:
-      raise CliError(f'unknown model: {term}')
-    resolved.extend(matched)
-  return tuple(dict.fromkeys(resolved))
+  exact = [name for name in matched if name.lower() in {term.lower() for term in terms}]
+  return sorted(exact or matched)[0]
 
 
 def nested_table(node: dict[str, Any], path: tuple[str, ...], label: str) -> dict[str, Any]:

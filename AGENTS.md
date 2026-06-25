@@ -8,22 +8,26 @@
 
 The CLI is a flat set of verbs, each scoped to one target. Do not reintroduce a Docker/Ollama-style noun-subcommand hierarchy.
 
-- Instance-scoped: `list`, `find`, `sync`, `remove`, `serve`
-- Model-store-scoped: `tidy`
-- Config-repo-scoped: `refresh`
-- Environment: `doctor`
+- Model-scoped (take `[term ...]`): `list`, `find`, `sync`, `remove`
+- Instance-scoped (take `[term ...]`): `serve`
+- Model-store-scoped (no args): `tidy`
+- Config-repo-scoped (no args): `refresh`
+- Environment (no args): `doctor`
 
 Each CLI verb mirrors the action namespace in the instance TOML: the `sync` verb reads `[models.*.sync.hf]`, the `serve` verb reads `[serve.llama-server]` and `[models.*.serve.llama-server]`. Keep these names in sync when adding or renaming a verb. There is no backwards compatibility or migration for renamed config keys.
-
-`find` lists all defined models from the config; `list` lists only models whose files exist on disk. They share `_filter_instances` (the term filter) and `echo_matches` (the output) in `cli.py`/`instances.py` — the only difference is the candidate set. The filter forms `<instance>-<model>` per model and keeps it when every term is a case-insensitive substring (ANDed, order-independent). With no terms the filter passes everything.
 
 `tidy` is store-wide: it keeps the `local-dir` of every model defined in every instance (plus the parent folders leading to them) and deletes everything else under `model_dir`. It reconciles against current definitions, so it depends on `refresh` having been run.
 
 `--dry-run` / `-n` is parsed in `main()` so it can appear anywhere in the args, and is also a root option. Destructive verbs (`remove`, `tidy`) must honor it and must refuse to touch paths outside `model_dir`.
 
-## Argument Resolution
+## Matching: WIDE and PINPOINT
 
-`sync`, `remove`, and `serve` resolve their `<instance>` and `[model ...]` arguments through `resolve_instance` / `resolve_models`, built on `_loose_match` in `instances.py`. The invariant: an exact (case-insensitive) match short-circuits substring matching; otherwise the term matches every name it is a substring of. An instance must resolve to exactly one (ambiguous or unknown is an error). A model term may glob to several, unless it matches one exactly. Preserve this short-circuit rule and route any new instance/model argument through these resolvers rather than matching names directly.
+This is the core CLI philosophy, mirrored from the `wut` project (`docs/COMMANDS.md` at <https://github.com/meop/wut>). All term-taking commands share one matcher in `instances.py`: `_filter_instances` forms `<instance>-<model>` per model and keeps it when every term is a case-insensitive substring (ANDed, order-independent; no terms passes everything). What differs is cardinality:
+
+- **WIDE** — act on every match. Read-only and bulk-idempotent verbs: `find`, `list`, `sync`. `find`/`installed`/`wide_models` flatten the filter to the full set; `find`/`list` differ only in candidate set (defined vs on-disk) and both render via `echo_matches`.
+- **PINPOINT** — narrow with the same filter, then reduce to one via `_pinpoint`: prefer an exact name match, else take the first by stable sort. Destructive/single-effect verbs: `remove` (one installed model, via `pinpoint_installed_model`) and `serve` (one instance, via `pinpoint_instance`).
+
+Invariants to preserve: exact-match is only the PINPOINT tie-breaker, never a third mode (do not add exact-short-circuit to WIDE). `remove` and `serve` require at least one term. Route any new term argument through these helpers rather than matching names directly, and classify new verbs as WIDE (read-only/bulk/idempotent) or PINPOINT (destructive/single-effect).
 
 ## Config Contract
 
