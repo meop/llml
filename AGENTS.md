@@ -1,5 +1,7 @@
 # AGENTS
 
+> **Design philosophy:** the CLI follows the WIDE/PINPOINT command model from the companion `wut` project. Read it before changing any command or matching behavior: [`wut/docs/COMMANDS.md`](https://github.com/meop/wut/blob/main/docs/COMMANDS.md). The [Matching: WIDE and PINPOINT](#matching-wide-and-pinpoint) section below is the llml-specific application of it.
+
 ## Project Shape
 
 `llml` is a Python CLI package. Keep CLI parsing in `llml/cli.py`, provider work in `llml/actions.py`, instance/model parsing, matching, and rendering in `llml/instances.py`, config-repo git work in `llml/repos.py`, and user/config settings in `llml/settings.py`.
@@ -22,7 +24,7 @@ Each CLI verb mirrors the action namespace in the instance TOML: the `sync` verb
 
 ## Matching: WIDE and PINPOINT
 
-This is the core CLI philosophy, mirrored from the `wut` project (`docs/COMMANDS.md` at <https://github.com/meop/wut>). All term-taking commands share one matcher in `instances.py`: `_filter_instances` forms `<instance>-<model>` per model and keeps it when every term is a case-insensitive substring (ANDed, order-independent; no terms passes everything). What differs is cardinality:
+This is the core CLI philosophy, mirrored from the `wut` project ([`wut/docs/COMMANDS.md`](https://github.com/meop/wut/blob/main/docs/COMMANDS.md)). All term-taking commands share one matcher in `instances.py`: `_filter_instances` forms `<instance>-<model>` per model and keeps it when every term is a case-insensitive substring (ANDed, order-independent; no terms passes everything). What differs is cardinality:
 
 - **WIDE** — act on every match. Read-only and bulk-idempotent verbs: `find`, `list`, `sync`. `find`/`installed`/`wide_models` flatten the filter to the full set; `find`/`list` differ only in candidate set (defined vs on-disk) and both render via `echo_matches`.
 - **PINPOINT** — narrow with the same filter, then reduce to one via `_pinpoint`: prefer an exact name match, else take the first by stable sort. Destructive/single-effect verbs: `remove` (one installed model, via `pinpoint_installed_model`) and `serve` (one instance, via `pinpoint_instance`).
